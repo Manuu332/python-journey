@@ -1,6 +1,6 @@
 # Basic Calculator Program
-
 def calculator():
+    
     print("Basic Calculator")
     print("Operations available: + (addition), - (subtraction), * (multiplication), / (division)")
     
