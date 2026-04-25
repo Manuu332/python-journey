@@ -1,12 +1,30 @@
 import tkinter as tk
 from weather import get_weather, get_forecast
+from PIL import Image , ImageTk
+import requests
+from io import BytesIO
+import geocoder
+import threading
 
-SKY_BG = "#dff3ff"
+SKY_BG = "#171b1d"
 CARD_BG = "#ffffff"
 TITLE_COLOR = "#133b5c"
 TEXT_COLOR = "#244b66"
 ACCENT_COLOR = "#0b6e99"
 SOFT_COLOR = "#d8ecf5"
+
+recent_cities = []
+
+def threaded_fetch():
+    thread = threading .Thread(target = fetch_weather)
+    thread.start()
+
+def get_my_city():
+    try:
+        g = geocoder.ip ('me')
+        return g.city if g.city else ""
+    except:
+        return ""
 
 def get_emoji(description):
     description = description.lower()
@@ -24,8 +42,14 @@ def get_emoji(description):
 
 def clear_weather():
     city_entry.delete(0 , tk.END)
-    result_label.config(text = "Input city to get started.")
+    result_label.config(text = "Type city to get started")
     status_label.config(text = "Ready")
+    
+    my_city = get_my_city()
+
+    if my_city:
+        city_entry.insert(0 , my_city)
+
     city_entry.focus()
 
 def fetch_weather():
@@ -36,6 +60,11 @@ def fetch_weather():
         result_label.config(text = "❌ Enter city name")
         status_label.config(text = "❌ Waiting for a city name...")
         return
+
+    if city not in recent_cities:
+        recent_cities.append(city)
+        if len(recent_cities) > 5:
+            recent_cities.pop(0)
 
     status_label.config(text = "⏳ Fetching weather data...")
     search_button.config(state = "disabled")
@@ -49,6 +78,10 @@ def fetch_weather():
             status_label.config(text = "❌ Error fetching weather data...")
             return
 
+        icon_img = get_icon_image(weather["icon"])
+        icon_label.config(image = icon_img)
+        icon_label.image = icon_img
+
         emoji = get_emoji(weather["description"])
         wind_unit = "mph" if unit == "F" else "m/s"
 
@@ -57,6 +90,8 @@ def fetch_weather():
         output += f"🌡 {weather['temperature']}°{unit}\n"
         output += f"💧 {weather['humidity']}%\n"
         output += f"💨 {weather['wind']} {wind_unit}\n"
+        output += f"\n🕒 Recent: \n"
+        output += f", ".join(recent_cities)
 
         forecast = get_forecast(city , unit)
 
@@ -64,7 +99,7 @@ def fetch_weather():
             output += "\n📅 5-Day Forecast:\n"
             for item in forecast:
                 forecast_emoji = get_emoji(item["desc"])
-                output += f"{item['day']}: {forecast_emoji} {item['temp']}°{unit}\n"
+                output += f"{item['day']:<10}: {forecast_emoji} {item['temp']}°{unit}\n\n"
             status_label.config(text ="Weather updated")    
         else:
             output += "\n📅 Forecast unavailable."
@@ -74,6 +109,33 @@ def fetch_weather():
 
     finally:
         search_button.config(state = "normal")
+
+def get_icon_image(icon_code):
+    url = f"https://openweathermap.org/img/wn/{icon_code}@2x.png"
+    response = requests.get(url)
+    img_data = response.content
+    img = Image.open(BytesIO(img_data))
+    return ImageTk.PhotoImage(img)
+
+is_dark = False
+
+def toggle_dark_mode():
+    global is_dark
+    is_dark = not is_dark
+
+    bg = "#1e1e1e" if is_dark else SKY_BG
+    card = "#2b2b2b" if is_dark else CARD_BG
+    text = "white" if is_dark else TEXT_COLOR
+    
+    root.configure(bg = bg)
+    app_frame.configure(bg = bg)
+    input_card.configure(bg = card)
+    result_card.configure(bg = card)
+
+    result_label.configure(bg = card, fg = text)
+    status_label.configure(bg = bg, fg = text)
+    title_label.configure(bg = bg, fg = text)
+    subtitle_label.configure(bg = bg, fg = text)
 
 root = tk.Tk()
 root.title("Hali ya Anga 🌞")
@@ -168,7 +230,7 @@ button_frame.pack(fill = "x")
 search_button =tk.Button(
     button_frame, 
     text = "Get Weather" , 
-    command = fetch_weather, 
+    command = threaded_fetch, 
     bg = ACCENT_COLOR, 
     fg = "white", 
     activebackground = "#095675", 
@@ -194,6 +256,13 @@ clear_button = tk.Button(
     )
 clear_button.pack(side = "left" , padx = (10 , 0))
 
+dark_button = tk.Button(
+    button_frame, 
+    text = "🌚 Dark Mode", 
+    command = toggle_dark_mode, 
+)
+dark_button.pack(side = "right")
+
 status_label = tk.Label(
     app_frame, 
     text = "Ready", 
@@ -214,11 +283,20 @@ result_label = tk.Label(
     bg = CARD_BG, 
     fg = TEXT_COLOR, 
     font = ("Segoe UI" , 10), 
-    wraplength = 350, 
+    wraplength = 380, 
     )
 result_label.pack(fill = "both" , expand = True)
 
+icon_label = tk.Label(result_card , bg = CARD_BG)
+icon_label.pack()
+
 root.bind("<Return>" , lambda event : fetch_weather())
+
+my_city = get_my_city()
+if my_city:
+    city_entry.insert(0 , my_city)
+    fetch_weather()
+
 city_entry.focus()
 
 root.mainloop()

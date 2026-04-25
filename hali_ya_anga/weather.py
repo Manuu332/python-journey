@@ -2,8 +2,19 @@ import requests
 from config import API_KEY , BASE_URL
 from datetime import datetime
 
+weather_cache = {}
+forecast_cache = {}
+
+def get_api_unit(unit):
+    return "imperial" if unit == "F" else "metric"
+
 def get_weather(city, unit = "C"):
-    api_unit = "imperial" if unit == "F" else "metric"
+    cache_key = f"{city}_{unit}"
+    
+    if cache_key in weather_cache:
+        return weather_cache[cache_key]
+    
+    api_unit = get_api_unit(unit)
     url = f"{BASE_URL}/weather"
     params = {
         "q": city,
@@ -14,22 +25,33 @@ def get_weather(city, unit = "C"):
     try:
         response = requests.get(url , params = params , timeout = 10)
         response.raise_for_status()
-    except requests.RequestException:
+    except requests.RequestException as e:
+        print(f"Error: {e}")
         return None
 
     data = response.json()
 
     weather_data = {
         "city": data["name"],
-        "temperature": data["main"]["temp"],
+        "temperature": data.get("main", {}).get("temp"),
         "description": data["weather"][0]["description"],
-        "humidity": data["main"]["humidity"],
-        "wind": data["wind"]["speed"],
+        "humidity": data.get("main", {}).get("humidity"),
+        "wind": data.get("wind", {}).get("speed"),
+        "icon": data["weather"][0]["icon"],
+        "feels_like": data.get("main", {}).get("feels_like"),
     }
+    
+    weather_cache[cache_key] = weather_data
+    
     return weather_data
 
 def get_forecast(city , unit = "C"):
-    api_unit = "imperial" if unit == "F" else "metric"
+    cache_key = f"{city}_{unit}"
+
+    if cache_key in forecast_cache:
+        return forecast_cache[cache_key]
+    
+    api_unit = get_api_unit(unit)
     url = f"{BASE_URL}/forecast"
     params = {
         "q": city,
@@ -40,7 +62,8 @@ def get_forecast(city , unit = "C"):
     try:
         response = requests.get(url , params = params , timeout = 10)
         response.raise_for_status()
-    except requests.RequestException:
+    except requests.RequestException as e:
+        print(f"Error: {e}")
         return None
     
     data = response.json()
@@ -57,5 +80,9 @@ def get_forecast(city , unit = "C"):
                 "day": day_name,
                 "temp": item["main"]["temp"],
                 "desc": item["weather"][0]["description"],
+                "icon": item["weather"][0]["icon"],
                 })
-    return forecast_data
+    
+    forecast_cache[cache_key] = forecast_data
+    
+    return forecast_data[:5]
